@@ -12,19 +12,33 @@ import {
   ChevronRight,
   Shield,
   Activity,
-  HeartHandshake
+  HeartHandshake,
+  Check,
+  XCircle,
+  Send
 } from 'lucide-react'
 import { MOCK_PETS, MOCK_APPOINTMENTS, MOCK_INVOICES } from './data/mockData'
-import { UserRole } from './types'
+import { UserRole, Appointment, Pet } from './types'
+import { BookingModal } from './components/BookingModal'
+import { ConsultationModal } from './components/ConsultationModal'
 
 export function App() {
   const [currentRole, setCurrentRole] = useState<UserRole>('pet_owner')
   const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'pets' | 'billing' | 'assistant'>('overview')
+  
+  // State for dynamic appointments and pets
+  const [appointments, setAppointments] = useState<Appointment[]>(MOCK_APPOINTMENTS)
+  const [pets, setPets] = useState<Pet[]>(MOCK_PETS)
+  const [isBookingOpen, setIsBookingOpen] = useState(false)
+  const [isConsultationOpen, setIsConsultationOpen] = useState(false)
+  const [activeConsultationPet, setActiveConsultationPet] = useState<Pet | null>(null)
+
+  // AI Assistant Chat State
   const [assistantInput, setAssistantInput] = useState('')
   const [chatMessages, setChatMessages] = useState<Array<{ sender: 'user' | 'assistant', text: string }>>([
     {
       sender: 'assistant',
-      text: 'Hello! I am your IntelliVet AI Assistant. I can help answer routine pet-care questions, prepare for upcoming visits, or recommend clinic appointment slots. How can I assist you and your pet today?'
+      text: 'Hello! I am your IntelliVet AI Assistant. I can help answer routine pet-care questions, provide guidance on upcoming booster shots, or recommend clinic appointment slots. How can I assist you and your pet today?'
     }
   ])
 
@@ -38,19 +52,41 @@ export function App() {
 
     // Simulated AI response with clinical safeguards
     setTimeout(() => {
-      let reply = "Thank you for asking! For general wellness, ensure fresh water is available and watch for changes in appetite or energy."
+      let reply = "Thank you for reaching out! For routine maintenance, ensure adequate hydration and a balanced diet suitable for your pet's life stage."
       const lower = userText.toLowerCase()
 
-      if (lower.includes('vomit') || lower.includes('blood') || lower.includes('letharg')) {
-        reply = "⚠️ Clinical Advisory Notice: Symptoms like lethargy, persistent vomiting, or bleeding can indicate acute distress. While I can provide general guidance, this requires direct examination by a licensed veterinarian. We recommend booking an urgent consultation or visiting the clinic immediately."
-      } else if (lower.includes('vaccin') || lower.includes('booster')) {
-        reply = "Core vaccinations for dogs (such as 5-in-1 / 6-in-1 and Rabies) and cats (4-in-1) are typically scheduled annually after initial puppy/kitten series. We can schedule a booster with Dr. Cruz this week if due!"
-      } else if (lower.includes('book') || lower.includes('appointment')) {
-        reply = "We have open slots with Dr. Cruz tomorrow at 9:00 AM, 11:30 AM, and 2:00 PM. Would you like to reserve one for Milo or Luna?"
+      if (lower.includes('vomit') || lower.includes('blood') || lower.includes('letharg') || lower.includes('emergency')) {
+        reply = "⚠️ Clinical Advisory Notice: Symptoms like severe lethargy, persistent vomiting, or bleeding can indicate acute distress. While I can provide general guidance, this requires direct examination by a licensed veterinarian. We recommend booking an urgent consultation or visiting the clinic immediately."
+      } else if (lower.includes('vaccin') || lower.includes('booster') || lower.includes('shot')) {
+        reply = "Standard immunization schedules for canines recommend annual 6-in-1 (DHPPiL) boosters alongside Rabies immunization. For felines, feline panleukopenia and respiratory complex (4-in-1) boosters are recommended. Milo has a booster due this month."
+      } else if (lower.includes('book') || lower.includes('schedule') || lower.includes('slot')) {
+        reply = "Dr. Cruz, DVM has open consultation slots tomorrow at 9:00 AM, 11:15 AM, and 2:15 PM. You can click 'Book Appointment' at the top right to reserve instantly!"
       }
 
       setChatMessages(prev => [...prev, { sender: 'assistant', text: reply }])
     }, 450)
+  }
+
+  // Handle appointment status change (for staff / vet)
+  const handleUpdateStatus = (id: number, status: Appointment['status']) => {
+    setAppointments(prev => prev.map(a => a.id === id ? { ...a, status } : a))
+  }
+
+  // Handle new appointment booking
+  const handleAddAppointment = (apptData: Partial<Appointment>) => {
+    const newAppt: Appointment = {
+      id: Date.now(),
+      scheduled_at: apptData.scheduled_at || new Date().toISOString(),
+      duration_minutes: 30,
+      status: 'pending',
+      service_type: apptData.service_type || 'Consultation',
+      reason: apptData.reason,
+      pet_id: apptData.pet_id || 1,
+      pet_name: apptData.pet_name || 'Pet',
+      owner_name: 'Maria Santos',
+      vet_name: 'Dr. Cruz, DVM',
+    }
+    setAppointments(prev => [newAppt, ...prev])
   }
 
   return (
@@ -64,7 +100,7 @@ export function App() {
             </div>
             <div>
               <span className="font-bold text-xl text-slate-900 tracking-tight">Intelli<span className="text-teal-600">Vet</span></span>
-              <span className="hidden sm:inline-block ml-2 text-xs px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 font-semibold border border-teal-100">
+              <span className="hidden sm:inline-block ml-2 text-xs px-2.5 py-0.5 rounded-full bg-teal-50 text-teal-700 font-semibold border border-teal-100">
                 Philippine Clinic Edition
               </span>
             </div>
@@ -72,7 +108,7 @@ export function App() {
 
           {/* Role Switcher Demo Control */}
           <div className="flex items-center gap-3">
-            <span className="text-xs text-slate-500 font-medium hidden md:inline">Viewing interface as:</span>
+            <span className="text-xs text-slate-500 font-medium hidden md:inline">Active View:</span>
             <div className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-0.5">
               <button
                 onClick={() => setCurrentRole('pet_owner')}
@@ -118,7 +154,7 @@ export function App() {
               activeTab === 'appointments' ? 'border-teal-600 text-teal-600 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-900'
             }`}
           >
-            <Calendar className="h-4 w-4" /> Appointments ({MOCK_APPOINTMENTS.length})
+            <Calendar className="h-4 w-4" /> Appointments ({appointments.length})
           </button>
           <button
             onClick={() => setActiveTab('pets')}
@@ -126,7 +162,7 @@ export function App() {
               activeTab === 'pets' ? 'border-teal-600 text-teal-600 font-semibold' : 'border-transparent text-slate-500 hover:text-slate-900'
             }`}
           >
-            <Users className="h-4 w-4" /> {currentRole === 'pet_owner' ? 'My Pets' : 'Patient Records'} ({MOCK_PETS.length})
+            <Users className="h-4 w-4" /> {currentRole === 'pet_owner' ? 'My Pets' : 'Patient Records'} ({pets.length})
           </button>
           {(currentRole === 'admin_staff' || currentRole === 'pet_owner') && (
             <button
@@ -177,8 +213,8 @@ export function App() {
               <Bot className="h-4 w-4" /> Ask AI Care Guide
             </button>
             <button 
-              onClick={() => setActiveTab('appointments')}
-              className="bg-white text-teal-800 hover:bg-teal-50 px-4 py-2 rounded-xl text-sm font-semibold transition-colors flex items-center gap-2 shadow-sm"
+              onClick={() => setIsBookingOpen(true)}
+              className="bg-white text-teal-800 hover:bg-teal-50 px-4 py-2 rounded-xl text-sm font-semibold transition-colors flex items-center gap-2 shadow-sm cursor-pointer"
             >
               <PlusCircle className="h-4 w-4" /> Book Appointment
             </button>
@@ -197,8 +233,10 @@ export function App() {
                     <Calendar className="h-4 w-4" />
                   </div>
                 </div>
-                <div className="text-2xl font-bold text-slate-900 mt-2">2</div>
-                <span className="text-xs text-teal-600 font-medium">Next: Tomorrow at 9:00 AM</span>
+                <div className="text-2xl font-bold text-slate-900 mt-2">
+                  {appointments.filter(a => a.status !== 'cancelled').length}
+                </div>
+                <span className="text-xs text-teal-600 font-medium">Automated slot validation active</span>
               </div>
 
               <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
@@ -208,7 +246,7 @@ export function App() {
                     <HeartHandshake className="h-4 w-4" />
                   </div>
                 </div>
-                <div className="text-2xl font-bold text-slate-900 mt-2">{MOCK_PETS.length}</div>
+                <div className="text-2xl font-bold text-slate-900 mt-2">{pets.length}</div>
                 <span className="text-xs text-slate-500">Milo, Luna, Barkley</span>
               </div>
 
@@ -246,14 +284,14 @@ export function App() {
                   </h2>
                   <button 
                     onClick={() => setActiveTab('appointments')}
-                    className="text-xs font-semibold text-teal-600 hover:text-teal-700 flex items-center gap-1"
+                    className="text-xs font-semibold text-teal-600 hover:text-teal-700 flex items-center gap-1 cursor-pointer"
                   >
                     View All <ChevronRight className="h-3 w-3" />
                   </button>
                 </div>
 
                 <div className="divide-y divide-slate-100">
-                  {MOCK_APPOINTMENTS.map((appt) => (
+                  {appointments.slice(0, 3).map((appt) => (
                     <div key={appt.id} className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div>
                         <div className="flex items-center gap-2">
@@ -305,7 +343,7 @@ export function App() {
 
                 <button 
                   onClick={() => setActiveTab('assistant')}
-                  className="w-full bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 py-2.5 px-4 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-colors"
+                  className="w-full bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 py-2.5 px-4 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
                 >
                   <Bot className="h-4 w-4" /> Ask AI About Milo's Nutrition & Care
                 </button>
@@ -322,7 +360,10 @@ export function App() {
                 <h2 className="text-xl font-bold text-slate-900">Clinic Appointment Schedule</h2>
                 <p className="text-xs text-slate-500 mt-1">Conflict-aware slot allocation and client appointment tracking</p>
               </div>
-              <button className="bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold px-4 py-2 rounded-xl flex items-center gap-2 transition-colors">
+              <button 
+                onClick={() => setIsBookingOpen(true)}
+                className="bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold px-4 py-2 rounded-xl flex items-center gap-2 transition-colors cursor-pointer"
+              >
                 <PlusCircle className="h-4 w-4" /> New Booking
               </button>
             </div>
@@ -341,7 +382,7 @@ export function App() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {MOCK_APPOINTMENTS.map((appt) => (
+                  {appointments.map((appt) => (
                     <tr key={appt.id} className="hover:bg-slate-50 transition-colors">
                       <td className="py-3.5 px-4 font-semibold text-slate-900">{appt.pet_name}</td>
                       <td className="py-3.5 px-4">{appt.owner_name}</td>
@@ -354,13 +395,47 @@ export function App() {
                         <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${
                           appt.status === 'confirmed' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
                           appt.status === 'pending' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                          appt.status === 'completed' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
                           'bg-slate-100 text-slate-700'
                         }`}>
                           {appt.status}
                         </span>
                       </td>
                       <td className="py-3.5 px-4 text-right">
-                        <button className="text-teal-600 hover:text-teal-800 font-medium">Details</button>
+                        {/* Role-based actions */}
+                        {(currentRole === 'admin_staff' || currentRole === 'veterinarian') && appt.status === 'pending' && (
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => handleUpdateStatus(appt.id, 'confirmed')}
+                              className="px-2 py-1 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-semibold flex items-center gap-1 cursor-pointer"
+                              title="Confirm Appointment"
+                            >
+                              <Check className="h-3 w-3" /> Confirm
+                            </button>
+                            <button
+                              onClick={() => handleUpdateStatus(appt.id, 'cancelled')}
+                              className="px-2 py-1 rounded bg-rose-50 text-rose-700 hover:bg-rose-100 font-semibold flex items-center gap-1 cursor-pointer"
+                              title="Cancel Appointment"
+                            >
+                              <XCircle className="h-3 w-3" />
+                            </button>
+                          </div>
+                        )}
+                        {currentRole === 'veterinarian' && appt.status === 'confirmed' && (
+                          <button
+                            onClick={() => {
+                              const foundPet = pets.find(p => p.id === appt.pet_id) || pets[0]
+                              setActiveConsultationPet(foundPet)
+                              setIsConsultationOpen(true)
+                            }}
+                            className="px-2.5 py-1 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 font-semibold flex items-center gap-1 cursor-pointer ml-auto"
+                          >
+                            <Stethoscope className="h-3 w-3" /> SOAP Form
+                          </button>
+                        )}
+                        {appt.status === 'completed' && (
+                          <span className="text-[11px] text-slate-400 font-medium">Record Closed</span>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -378,13 +453,10 @@ export function App() {
                 <h2 className="text-xl font-bold text-slate-900">Patient Profiles & Medical Records</h2>
                 <p className="text-xs text-slate-500 mt-1">Centralized health history, breed info, and allergy logs</p>
               </div>
-              <button className="bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold px-4 py-2 rounded-xl flex items-center gap-2 transition-colors">
-                <PlusCircle className="h-4 w-4" /> Add Patient
-              </button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {MOCK_PETS.map((pet) => (
+              {pets.map((pet) => (
                 <div key={pet.id} className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col justify-between hover:shadow transition-shadow">
                   <div>
                     <div className="flex items-center justify-between mb-3">
@@ -407,9 +479,20 @@ export function App() {
                   </div>
 
                   <div className="mt-6 pt-3 border-t border-slate-100 flex items-center justify-between">
-                    <span className="text-[11px] text-teal-600 font-semibold cursor-pointer hover:underline">View SOAP Records</span>
-                    <button className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 rounded-lg font-medium transition-colors">
-                      Edit Profile
+                    <button
+                      onClick={() => {
+                        setActiveConsultationPet(pet)
+                        setIsConsultationOpen(true)
+                      }}
+                      className="text-[11px] text-teal-600 font-semibold cursor-pointer hover:underline"
+                    >
+                      View / Add SOAP Notes
+                    </button>
+                    <button 
+                      onClick={() => setIsBookingOpen(true)}
+                      className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer"
+                    >
+                      Book Visit
                     </button>
                   </div>
                 </div>
@@ -512,14 +595,34 @@ export function App() {
               />
               <button
                 type="submit"
-                className="bg-teal-600 hover:bg-teal-700 text-white px-5 py-2.5 rounded-xl text-xs font-semibold transition-colors"
+                className="bg-teal-600 hover:bg-teal-700 text-white px-5 py-2.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
               >
-                Send
+                <Send className="h-3.5 w-3.5" /> Send
               </button>
             </form>
           </div>
         )}
       </main>
+
+      {/* Booking Modal */}
+      <BookingModal
+        isOpen={isBookingOpen}
+        onClose={() => setIsBookingOpen(false)}
+        onBook={handleAddAppointment}
+        pets={pets}
+      />
+
+      {/* Consultation Modal */}
+      <ConsultationModal
+        isOpen={isConsultationOpen}
+        onClose={() => setIsConsultationOpen(false)}
+        pet={activeConsultationPet}
+        onSave={(soapNotes) => {
+          if (activeConsultationPet) {
+            setPets(prev => prev.map(p => p.id === activeConsultationPet.id ? { ...p, notes: soapNotes.assessment || soapNotes.plan } : p))
+          }
+        }}
+      />
 
       {/* Footer */}
       <footer className="border-t border-slate-200 bg-white py-4 mt-auto">
